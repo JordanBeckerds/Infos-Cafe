@@ -1,6 +1,6 @@
 <header class="bg-gray-950 text-gray-200 shadow-lg">
   <div class="max-w-[90vw] md:max-w-[75vw] mx-auto px-4 lg:px-8">
-    <div class="flex items-center justify-between h-32">
+    <div class="flex items-center justify-between h-[15vh]">
 
       <!-- Logo + Nom -->
       <div class="flex items-center">
@@ -21,6 +21,7 @@
         <a href="index.php?page=pc-build"      class="text-lg lg:text-xl font-medium hover:text-blue-400 transition">Montage PC</a>
         <a href="#" class="text-lg lg:text-xl font-medium hover:text-blue-400 transition">À propos</a>
         <a href="#" class="text-lg lg:text-xl font-medium hover:text-blue-400 transition">Contact</a>
+        <a href="index.php?page=login" class="text-lg lg:text-xl font-medium hover:text-blue-400 hover:bg-[#e5e7eb] transition bg-blue-400 py-3 px-6 rounded-2xl">Login</a>
       </nav>
 
       <!-- Bouton mobile -->

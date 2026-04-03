@@ -1,117 +1,148 @@
 <?php
-// index.php - Single entry point for Info-Café
-
-// Start session early (for future dashboard / authentication)
+// 1. INITIALIZATION
+ob_start(); 
 session_start();
 
-// Load config if needed (database, constants, etc.)
-// require_once __DIR__ . '/config/db.php';  // Uncomment when ready
+// Database Connection
+require_once __DIR__ . '/config/db.php';
 
-// Get requested page (secure default to 'home')
-$page = $_GET['page'] ?? 'home';
+// --- 2. LOGIN LOGIC (Processed before any HTML output) ---
+$login_error = '';
 
-// === PUBLIC PAGES (showcase / frontend) ===
-$public_pages = [
-    'home'          => __DIR__ . '/includes/showcase/home.php',
-    'lessons'       => __DIR__ . '/includes/showcase/lessons.php',
-    'repair'        => __DIR__ . '/includes/showcase/repair.php',
-    'pc-build'      => __DIR__ . '/includes/showcase/pc-build.php',
-    'about'         => __DIR__ . '/includes/showcase/about.php',
-    'contact'       => __DIR__ . '/includes/showcase/contact.php',
-    'booking_repair' => __DIR__ . '/includes/showcase/booking_repair.php',
-    'booking_lessons' => __DIR__ . '/includes/showcase/booking_lessons.php',
-    // Fallback 404 page
-    '404'           => __DIR__ . '/includes/showcase/404.php',
-];
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['page']) && $_GET['page'] === 'login') {
+    $email    = trim($_POST['email'] ?? '');
+    $password = $_POST['password'] ?? '';
 
-// === DASHBOARD / ADMIN PAGES (protected) ===
-$dashboard_pages = [
-    'login'             => __DIR__ . '/includes/dashboard/login.php',
-    'dashboard'         => __DIR__ . '/includes/dashboard/dash.php',
-    // Add more later: e.g. 'admin_courses', 'admin_bookings', etc.
-];
+    if (!empty($email) && !empty($password)) {
+        // Search in Users Table
+        $stmt = query("SELECT * FROM Users WHERE Email = ?", [$email]);
+        $user = $stmt->fetch();
 
-// === ROUTING LOGIC ===
+        if ($user && password_verify($password, $user['Password'])) {
+            $_SESSION['user_id']    = $user['Id'];
+            $_SESSION['user_name']  = $user['FirstName'] . ' ' . $user['LastName'];
+            $_SESSION['is_admin']   = false;
+            header("Location: index.php?page=home");
+            exit;
+        } 
+        
+        // Search in Admins Table
+        $stmtAdmin = query("SELECT * FROM Admins WHERE Email = ?", [$email]);
+        $admin = $stmtAdmin->fetch();
 
-// 1. Protected dashboard area
-if (array_key_exists($page, $dashboard_pages)) {
-    $content_file = $dashboard_pages[$page];
-
-    // If already logged in and trying to access login → redirect to dashboard
-    if ($page === 'login' && isset($_SESSION['user_id'])) {
-        header('Location: /index.php?page=dashboard');
-        exit;
+        if ($admin && password_verify($password, $admin['Password'])) {
+            $_SESSION['user_id']    = $admin['Id'];
+            $_SESSION['user_name']  = $admin['Username']; 
+            $_SESSION['is_admin']   = true;
+            header("Location: index.php?page=dashboard");
+            exit;
+        } else {
+            $login_error = "Email ou mot de passe incorrect.";
+        }
+    } else {
+        $login_error = "Veuillez remplir tous les champs.";
     }
+}
 
-    // Protect all dashboard pages except login
-    if ($page !== 'login' && !isset($_SESSION['user_id'])) {
-        header('Location: /index.php?page=login');
+// --- 3. ROUTING ---
+
+// 1. Get the page from the URL, but don't set a hard default yet
+$page = $_GET['page'] ?? null;
+
+// 2. Define our page maps
+$public_pages = [
+    'home'    => __DIR__ . '/includes/showcase/home.php',
+    'lessons' => __DIR__ . '/includes/showcase/lessons.php',
+    'repair'  => __DIR__ . '/includes/showcase/repair.php',
+    'login'   => __DIR__ . '/includes/showcase/login.php',
+    'verify'  => __DIR__ . '/includes/showcase/verify.php', // Verification logic
+    '404'     => __DIR__ . '/includes/showcase/404.php',
+];
+
+$dashboard_pages = [
+    'dashboard'     => __DIR__ . '/includes/dashboard/home.php',
+    'admin_users'   => __DIR__ . '/includes/dashboard/admin_users.php',
+    'edit_user'     => __DIR__ . '/includes/dashboard/edit_user.php',
+    'admin_prices'  => __DIR__ . '/includes/dashboard/admin_prices.php',
+    'admin_history' => __DIR__ . '/includes/dashboard/admin_history.php',
+    'admin_staff'   => __DIR__ . '/includes/dashboard/admin_staff.php',
+];
+
+// --- 4. EXECUTION LOGIC ---
+
+// A. Check if we are in "Dashboard Mode"
+// We know we are in dashboard mode if the page starts with 'admin_', 'edit_', or is 'dashboard'
+if ($page === 'dashboard' || str_starts_with($page, 'admin_') || str_starts_with($page, 'edit_')) {
+    
+    if (!isset($_SESSION['user_id']) || $_SESSION['is_admin'] !== true) {
+        header('Location: index.php?page=login');
         exit;
     }
 
     include __DIR__ . '/includes/dashboard/header.php';
-    ?>
-    <main id="dashboard-content" class="min-h-screen bg-gray-50">
-        <?php
-        if (file_exists($content_file)) {
-            include $content_file;
-        } else {
-            echo '<div class="p-20 text-center text-3xl font-bold text-red-600">Page not found (404)</div>';
-        }
-        ?>
-    </main>
-    <?php
+    
+    // If the specific page doesn't exist in our array, default to 'dashboard'
+    $content_file = $dashboard_pages[$page] ?? $dashboard_pages['dashboard'];
+    
+    include $content_file;
     include __DIR__ . '/includes/dashboard/footer.php';
-    exit; // Stop here – don't load public layout
+    exit;
 }
 
-// 2. Public showcase site
+// B. Otherwise, we are in "Showcase Mode"
+// If no page is specified at all, default to 'home'
+$page = $page ?? 'home';
+
+$content_file = $public_pages[$page] ?? $public_pages['404'];
+
+// --- 5. PUBLIC SHOWCASE LAYOUT (Normal Top-to-Bottom) ---
 $content_file = $public_pages[$page] ?? $public_pages['home'];
-
-// Handle 404 gracefully
 if (!file_exists($content_file)) {
-    $content_file = $public_pages['404'] ?? __DIR__ . '/includes/showcase/404.php';
+    $content_file = $public_pages['404'];
 }
-
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Info-Café – Learn Digital at Your Own Pace</title>
+    <title>Info-Café – Gestion & Services</title>
 
-    <!-- Tailwind CSS CDN (current recommended version) -->
     <script src="https://cdn.tailwindcss.com"></script>
-
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-
-    <!-- Your custom CSS file if needed -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
 </head>
-<body class="bg-gray-50 text-gray-900 antialiased flex flex-col">
+<body class="bg-gray-50 text-gray-900 antialiased flex flex-col min-h-screen">
 
     <?php include __DIR__ . '/includes/showcase/header.php'; ?>
 
-    <main id="content">
-        <?php include $content_file; ?>
+    <main id="content" class="flex-grow">
+        <?php 
+            $error = $login_error; 
+            include $content_file; 
+        ?>
     </main>
 
     <?php include __DIR__ . '/includes/showcase/footer.php'; ?>
 
-    <!-- Mobile menu toggle script (shared across all showcase pages) -->
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            const btn = document.getElementById('mobile-menu-btn');
+            const btn = document.getElementById('mobile-menu-button');
             const menu = document.getElementById('mobile-menu');
             if (btn && menu) {
-                btn.addEventListener('click', () => menu.classList.toggle('hidden'));
+                btn.addEventListener('click', () => {
+                    menu.classList.toggle('hidden');
+                });
             }
         });
     </script>
 
 </body>
 </html>
+<?php 
+ob_end_flush(); 
+?>

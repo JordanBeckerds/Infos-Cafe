@@ -8,6 +8,8 @@ CREATE TABLE `Users` (
     `Phone`                 VARCHAR(30)     NOT NULL,
     `PostalCode`            VARCHAR(20)     NOT NULL,
     `Address`               VARCHAR(255)    NOT NULL,
+    `is_verified`              TINYINT(1)      NOT NULL DEFAULT 0,
+    `Token`                 VARCHAR(255)    NULL,
     `SubscribedToAI`        TINYINT(1)      NOT NULL DEFAULT 0,
     `SubscribedToMaintenance` TINYINT(1)    NOT NULL DEFAULT 0,
     `CreatedAt`             TIMESTAMP       NULL DEFAULT CURRENT_TIMESTAMP,
